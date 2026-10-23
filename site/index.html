@@ -1,131 +1,32 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<meta charset="utf-8">
-<title>Browser TLS Certificate Generator</title>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Node-Controlled Site</title>
+  </head>
+  <body>
+    <div id="app">Waiting for server...</div>
 
-<button id="generate">Generate certificates</button>
-<pre id="status"></pre>
+    <script type="module">
+      import * as SocketIO from 'https://cdn.jsdelivr.net/npm/socket.io@4.8.4/+esm';
 
-<script type="module">
-import "https://cdn.jsdelivr.net/npm/reflect-metadata@0.2.2/+esm";
+      const manager = new SocketIO.Manager(location.origin);
+      const socket = new SocketIO.Socket(manager, '/');
 
-import {
-  X509CertificateGenerator,
-  BasicConstraintsExtension,
-  KeyUsagesExtension,
-  KeyUsageFlags,
-  ExtendedKeyUsageExtension,
-  SubjectAlternativeNameExtension,
-} from "https://cdn.jsdelivr.net/npm/@peculiar/x509/+esm";
+      socket.on('connect', () => {
+        console.log('Connected:', socket.id);
+      });
 
-const status = document.querySelector("#status");
+      socket.on('log', (data) => {
+        console.log(data);
+      });
 
-function pem(label, bytes) {
-  const array = bytes instanceof ArrayBuffer
-    ? new Uint8Array(bytes)
-    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-  let binary = "";
-  for (const byte of array) binary += String.fromCharCode(byte);
-
-  const base64 = btoa(binary);
-  const lines = base64.match(/.{1,64}/g) || [];
-
-  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----\n`;
-}
-
-function download(filename, content) {
-  const url = URL.createObjectURL(
-    new Blob([content], { type: "application/x-pem-file" })
-  );
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function makeKeyPair() {
-  return crypto.subtle.generateKey(
-    {
-      name: "ECDSA",
-      namedCurve: "P-256",
-    },
-    true,
-    ["sign", "verify"]
-  );
-}
-
-document.querySelector("#generate").addEventListener("click", async () => {
-  try {
-    status.textContent = "Generating keys and certificates…";
-
-    const now = Date.now();
-
-    // Root CA.
-    const caKeys = await makeKeyPair();
-
-    const caCert = await X509CertificateGenerator.createSelfSigned({
-      serialNumber: "01",
-      name: "CN=Development Root CA",
-      notBefore: new Date(now - 300000),
-      notAfter: new Date(now + 365 * 86400000),
-      keys: caKeys,
-      signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-      extensions: [
-        new BasicConstraintsExtension(true, 0, true),
-        new KeyUsagesExtension(
-          KeyUsageFlags.keyCertSign |
-          KeyUsageFlags.cRLSign,
-          true
-        )
-      ],
-    });
-
-    // Server certificate.
-    const serverKeys = await makeKeyPair();
-
-    const serverCert = await X509CertificateGenerator.create({
-      serialNumber: "02",
-      subject: "CN=localhost",
-      issuer: caCert.subject,
-      notBefore: new Date(now - 300000),
-      notAfter: new Date(now + 90 * 86400000),
-      publicKey: serverKeys.publicKey,
-      signingKey: caKeys.privateKey,
-      signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-      extensions: [
-        new BasicConstraintsExtension(false),
-        new KeyUsagesExtension(
-          KeyUsageFlags.digitalSignature |
-          KeyUsageFlags.keyEncipherment,
-          true
-        ),
-        new ExtendedKeyUsageExtension(["1.3.6.1.5.5.7.3.1"]),
-        new SubjectAlternativeNameExtension([
-          { type: "dns", value: "localhost" },
-          { type: "ip", value: "127.0.0.1" },
-          { type: "ip", value: "::1" },
-        ]),
-      ],
-    });
-
-    const caKey = await crypto.subtle.exportKey("pkcs8", caKeys.privateKey);
-    const serverKey = await crypto.subtle.exportKey("pkcs8", serverKeys.privateKey);
-
-    download("rootCA.pem", caCert.toString("pem"));
-    download("rootCA-key.pem", pem("PRIVATE KEY", caKey));
-    download("localhost.pem", serverCert.toString("pem"));
-    download("localhost-key.pem", pem("PRIVATE KEY", serverKey));
-
-    status.textContent = "Generated four PEM files. Keep rootCA-key.pem secret.";
-  } catch (error) {
-    console.error(error);
-    status.textContent = `${error.name}: ${error.message}`;
-  }
-});
-</script>
+      socket.emit('log', {
+        message: 'die',
+        timestamp: Date.now()
+      });
+    </script>
+  </body>
 </html>
