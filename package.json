@@ -1,0 +1,21 @@
+{
+  "name": "starter",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "version": "1.0.0",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  },
+  "dependencies": {
+    "@feathersjs/express": "^5.0.50",
+    "@feathersjs/feathers": "^5.0.50",
+    "@feathersjs/socketio": "^5.0.50"
+  }
+}
