@@ -5,27 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Node-Controlled Site</title>
+    <script src="otplib.js"></script>
   </head>
   <body>
     <div id="app">Waiting for server...</div>
 
     <script type="module">
-      import * as SocketIO from 'https://cdn.jsdelivr.net/npm/socket.io@4.8.4/+esm';
-
-      const manager = new SocketIO.Manager(location.origin);
-      const socket = new SocketIO.Socket(manager, '/');
-
-      socket.on('connect', () => {
-        console.log('Connected:', socket.id);
-      });
-
-      socket.on('log', (data) => {
-        console.log(data);
-      });
-
-      socket.emit('log', {
-        message: 'die',
-        timestamp: Date.now()
+      import * as SocketIO from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/+esm';
+      window.sockio = SocketIO;
+    
+      const manager = new SocketIO.Manager();
+      const socket = manager.socket('/');
+      window.socket = socket;
+    
+      socket.on('exec', async (js) => {
+        let func = new Function(js);
+        await func();
       });
     </script>
   </body>

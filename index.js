@@ -1,24 +1,25 @@
 
-const { feathers } = require('@feathersjs/feathers');
-const express = require('@feathersjs/express');
-const socketio = require('@feathersjs/socketio');
+const { feathers } = require("@feathersjs/feathers");
+const express = require("@feathersjs/express");
+const socketio = require("@feathersjs/socketio");
 
 const app = express(feathers());
 
-app.configure(socketio());
+app.configure(socketio((io) => {
+  io.on("connection", (socket) => {
+    console.log("Client connected:", socket.id);
 
-app.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+    socket.emit("exec", `document.getElementById("app").innerHTML = "Connected!"`);
 
-  socket.emit('log', 'hi');
-
-  socket.on('log', (data) => {
-    console.log(data);
+    socket.on("exec", async function(js) {
+      let func = new Function("socket", js);
+      await func(socket);
+    });
   });
-});
+}));
 
 app.use(express.static('site'));
 
 app.listen(3030, () => {
-  console.log('HTTPS server listening at https://localhost:3030');
+  console.log("HTTPS server listening at 3030");
 });
