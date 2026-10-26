@@ -5,10 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Node-Controlled Site</title>
-    <script src="otplib.js"></script>
   </head>
   <body>
-    <div id="app">Waiting for server...</div>
+    <button id="send">Ping</button>
 
     <script type="module">
       import * as SocketIO from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/+esm';
@@ -18,9 +17,78 @@
       const socket = manager.socket('/');
       window.socket = socket;
     
-      socket.on('exec', async (js) => {
-        let func = new Function(js);
-        await func();
+      let clientKeyPair = null;
+      let sharedAesKey = null;
+
+      // 2. Listen for the server to initiate the key exchange
+      socket.on("handshake", async (data) => {
+        try {
+          const derBytes = new Uint8Array(data.publicKey);
+
+          // 1. Import Server RSA Public Key from raw SPKI DER bytes
+          const serverRsaPublicKey = await crypto.subtle.importKey(
+            "spki",
+            derBytes.buffer,
+            {
+              name: "RSA-OAEP",
+              hash: "SHA-256"
+            },
+            true,
+            ["encrypt"]
+          );
+
+          // 2. Generate local AES-GCM key
+          sharedAesKey = await crypto.subtle.generateKey(
+            { name: "AES-GCM", length: 256 },
+            true,
+            ["encrypt", "decrypt"]
+          );
+
+          // 3. Export raw AES key and encrypt with server RSA public key
+          const exportedAesKey = await crypto.subtle.exportKey("raw", sharedAesKey);
+          const encryptedAesKey = await crypto.subtle.encrypt(
+            { name: "RSA-OAEP" },
+            serverRsaPublicKey,
+            exportedAesKey
+          );
+
+          // 4. Send encrypted key bytes back to server
+          socket.emit("handshake", {
+            encryptedKey: Array.from(new Uint8Array(encryptedAesKey))
+          });
+
+          console.log("Handshake complete! Client ready.");
+        } catch (err) {
+          console.error("Handshake error:", err);
+        }
+      });
+
+      socket.send = async function(eventName, textPayload) {
+        if (!sharedAesKey) {
+          console.error("Cannot send: Shared AES key has not been established yet.");
+          return;
+        }
+
+        // Generate a random 12-byte Initialization Vector (IV)
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encodedText = new TextEncoder().encode(textPayload);
+
+        // Encrypt message using Web Crypto AES-GCM
+        const encryptedBuffer = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: iv },
+          sharedAesKey,
+          encodedText
+        );
+
+        // Emit byte arrays directly to match the server's expected payload format
+        socket.emit(eventName, {
+          iv: Array.from(iv),
+          data: Array.from(new Uint8Array(encryptedBuffer))
+        });
+      };
+
+      document.getElementById("send").addEventListener("click", () => {
+        socket.send("test", "Ping from browser client!");
       });
     </script>
   </body>
